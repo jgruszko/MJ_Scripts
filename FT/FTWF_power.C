@@ -1,19 +1,40 @@
+#include <iostream>
+#include <string>
+#include <complex>
+#include <vector>
+#include "TH1.h"
+#include "TH2.h"
+#include "TClonesArray.h"
+#include "TFile.h"
+#include "TTree.h"
+#include "TChain.h"
+#include "MGTEvent.hh"
+#include "MGWaveform.hh"
+#include "MGWFBaselineRemover.hh"
+#include "MGWFFastFourierTransformDefault.hh"
+#include "MGTWaveformFT.hh"
+#include "MGWFExtremumFinder.hh"
+#include "MGTEvent.hh"
+#include "GATDataSet.hh"
+
+using namespace std;
+using namespace CLHEP;
+int FTPower(int start, int end)
 {
-    gROOT->Reset();
-    gROOT->ProcessLine(".x $MGDODIR/Root/LoadMGDOClasses.C"); 
-    gROOT->ProcessLine(".L $MGDODIR/lib/libMGDOClasses.C"); 
-    gROOT->ProcessLine(".include \"$MGDODIR/Majorana\""); 
-    gROOT->ProcessLine("#include <complex>"); 
-    char infile1[200], infile2[200], infilename1[200], infilename2[200],title[200],titleSum[200], histname[200], SumFTPlot[200], FTWFname[200], outfilename[200];
+    //gROOT->Reset();
+    //gROOT->ProcessLine(".x $MGDODIR/Root/LoadMGDOClasses.C"); 
+    //gROOT->ProcessLine(".L $MGDODIR/lib/libMGDOClasses.C"); 
+    //gROOT->ProcessLine(".include \"$MGDODIR/Majorana\""); 
+    char title[200],titleSum[200], histname[200], FTWFname[200], outfilename[200];
     
-    int startrun=40002478;
-    int endrun=40002492;
+    int startrun=start;
+    int endrun=end;
     int runType = 0; //0 is unknown type, 1 is PT cooler, 2 thermosyphon, 3 in shield
     int nChannels = 0;
     if(endrun < startrun)
     {
 	cout <<"Run range not recognized as valid. Exiting script."<< endl;
-	break;
+	return 0;
     }
     else if (startrun > 40002477 && endrun < 40002493)
     {
@@ -33,7 +54,7 @@
     else
     {
 	cout <<"Run range not recognized as valid. Exiting script."<< endl;
-	break;
+	return 0;
     }
     double eventScale;
     double adcScale;
@@ -103,7 +124,7 @@
     if(t1 == NULL)
     {
 	cout << "Data not found! Exiting script." << endl;
-	break;
+	return 0;
     }
 
      t1->SetBranchAddress("energyCal",&energy);
@@ -214,7 +235,7 @@
 			highStopBin = (size_t) ceil(highStopFreq/binWidth);
 		    }
 		    //loop over sampling ranges for low and high freq power
-		    for(int x = lowStartBin; x < lowStopBin+1 ; x++) 
+		    for(size_t x = lowStartBin; x < lowStopBin+1 ; x++) 
 		    {  
 			if( x == 0 || x == FTWave->GetDataLength())
 			    lowPowerSum += std::norm(FTWave->At(x));
@@ -222,7 +243,7 @@
 			    lowPowerSum += 2*std::norm(FTWave->At(x));
 		    }
 
-		    for(int x = highStartBin; x < highStopBin+1 ; x++) 
+		    for(size_t x = highStartBin; x < highStopBin+1 ; x++) 
 		    {  
 			if( x == 0 || x == FTWave->GetDataLength())
 			    highPowerSum += std::norm(FTWave->At(x));
@@ -242,7 +263,7 @@
                     else
                         FTsumArray[cheasy]->AddNorms(*FTWave);
                    
-		    FTsumArray[cheasy]->LoadIntoHist(hFTsumArray[cheasy], 2);
+		    FTsumArray[cheasy]->LoadIntoHist(hFTsumArray[cheasy], MGTWaveformFT::kPower);
                     
               }
            }
@@ -287,6 +308,7 @@
 	treeFile->Write();
   // FTTree->Write("FTTree", TObject::kOverwrite);
    treeFile->Close();
-   gROOT->Reset();
+  // gROOT->Reset();
+  return 1;
 }
 
