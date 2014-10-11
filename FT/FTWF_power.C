@@ -7,7 +7,7 @@
     char infile1[200], infile2[200], infilename1[200], infilename2[200],title[200],titleSum[200], histname[200], SumFTPlot[200], FTWFname[200], outfilename[200];
     
     int startrun=40002478;
-    int endrun=40002478;
+    int endrun=40002492;
     int runType = 0; //0 is unknown type, 1 is PT cooler, 2 thermosyphon, 3 in shield
     int nChannels = 0;
     if(endrun < startrun)
