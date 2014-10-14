@@ -19,16 +19,7 @@
 
 using namespace std;
 using namespace CLHEP;
-int main(int argc, char** argv)
-{
-    if(argc != 2){
-	cout << "Usage: " << argv[0] << " starting run number" << endl;
-	return 1;
-    }
-    int startRun = (int) *(argv[0]);
-    int endRun = (int) *(argv[1]);
-    return FTPower(startRun, endRun);
-}
+
 int FTPower(int start, int end)
 {
     //gROOT->Reset();
@@ -112,7 +103,7 @@ int FTPower(int start, int end)
     double highStartFreq = 12.0*CLHEP::MHz;
     double highStopFreq = 14.0*CLHEP::MHz;
     double binWidth;
-    size_t lowStartBin, lowStopBin, highStartBin, highStopBin;
+    size_t lowStartBin = 0, lowStopBin= 0, highStartBin = 0, highStopBin= 0;
     double lowPowerSum = 0;
     double highPowerSum = 0;
 
@@ -130,16 +121,16 @@ int FTPower(int start, int end)
 	wfCount[j] = 0;
     }
     
-    TChain* t1 = DataSet->GetChains();
+     const TChain* t1 = DataSet->GetChains();
     if(t1 == NULL)
     {
 	cout << "Data not found! Exiting script." << endl;
 	return 0;
     }
-
-     t1->SetBranchAddress("energyCal",&energy);
-     t1->SetBranchAddress("channel",&channel);
-     t1->SetBranchAddress("event",&event);
+     TChain* copy = const_cast<TChain*>(t1);
+     copy->SetBranchAddress("energyCal",&energy);
+     copy->SetBranchAddress("channel",&channel);
+     copy->SetBranchAddress("event",&event);
      
      for(int j=0;j<nChannels;j++)
      {
@@ -147,7 +138,7 @@ int FTPower(int start, int end)
      }
 
      int cheasy = 0;
-     int nentries=t1->GetEntries();
+     int nentries=copy->GetEntries();
      cout << "number of entries " << nentries << endl;
     // nentries = 10; 
 
@@ -158,7 +149,7 @@ int FTPower(int start, int end)
             cout << "event number " << k << " of " << nentries << " i.e. " << k/double(nentries)*100 << " % done" << endl;
          }
          //FTWaveArr->Delete();
-         t1->GetEntry(k);
+         copy->GetEntry(k);
          int n = channel->size();
          lowFreqPower.resize(n);
          highFreqPower.resize(n);
@@ -322,3 +313,13 @@ int FTPower(int start, int end)
   return 1;
 }
 
+int main(int argc, char** argv)
+{
+    if(argc != 2){
+	cout << "Usage: " << argv[0] << " starting run number" << endl;
+	return 1;
+    }
+    int startRun = (int) *(argv[0]);
+    int endRun = (int) *(argv[1]);
+    return FTPower(startRun, endRun);
+}
