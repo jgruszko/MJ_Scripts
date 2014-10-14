@@ -19,6 +19,16 @@
 
 using namespace std;
 using namespace CLHEP;
+int main(int argc, char** argv)
+{
+    if(argc != 2){
+	cout << "Usage: " << argv[0] << " starting run number" << endl;
+	return 1;
+    }
+    int startRun = (int) *(argv[0]);
+    int endRun = (int) *(argv[1]);
+    return FTPower(startRun, endRun);
+}
 int FTPower(int start, int end)
 {
     //gROOT->Reset();
