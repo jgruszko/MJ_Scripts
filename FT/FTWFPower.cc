@@ -17,11 +17,12 @@
 #include "MGWFExtremumFinder.hh"
 #include "MGTEvent.hh"
 #include "GATDataSet.hh"
+#include "GATCalibrationMap.hh"
 
 using namespace std;
 using namespace CLHEP;
 
-int FTPower(int start, int end)
+int FTPower(int start, int end, double firstStart, double firstEnd, double secondStart, double secondEnd)
 {
     //gROOT->Reset();
     //gROOT->ProcessLine(".x $MGDODIR/Root/LoadMGDOClasses.C"); 
@@ -29,10 +30,12 @@ int FTPower(int start, int end)
     //gROOT->ProcessLine(".include \"$MGDODIR/Majorana\""); 
     char title[200],titleSum[200], histname[200], FTWFname[200], outfilename[200];
     
+    string calibrationFile = "/global/project/projectdirs/majorana/data/production/bk_calibration_summedrun.dat";
     int startrun=start;
     int endrun=end;
     int runType = 0; //0 is unknown type, 1 is PT cooler, 2 thermosyphon, 3 in shield
     int nChannels = 0;
+    Double_t run = 0;
     if(endrun < startrun)
     {
 	cout <<"Run range not recognized as valid. Exiting script."<< endl;
@@ -58,15 +61,13 @@ int FTPower(int start, int end)
 	cout <<"Run out of range. Start run is " << startrun <<". Exiting script."<< endl;
 	return 0;
     }
-    double adcScale;
+    double adcScale= 1;
     double eventScale;
 
-    vector<double>* energy = 0;
     vector<double>* channel = 0;
 
     MGTEvent* event = new MGTEvent();
     MGWFFastFourierTransformDefault* FFT = new MGWFFastFourierTransformDefault;
-    MGWFExtremumFinder* maxFinder = new MGWFExtremumFinder;
     MGWFBaselineRemover* BLRemove = new MGWFBaselineRemover;
     MGTWaveform* Wave;// = new MGTWaveform();
     //TH1D* hFT = new TH1D();
@@ -74,14 +75,13 @@ int FTPower(int start, int end)
     //TH1D* hFTsum = new TH1D();
  
     
+    GATCalibrationMap* calMap = new GATCalibrationMap();
+    calMap->ReadCalibrationMapFromTextFile(calibrationFile);
+
     TH1D* hFTsumArray[nChannels];
     MGTWaveformFT* FTsumArray[nChannels];
     int first[nChannels];
     int totalEntries[nChannels];
-    maxFinder->SetFindMaximum();
-    double maxAverage[nChannels];
-    double maxValue;
-    int wfCount[nChannels];
     BLRemove->SetStartSample((size_t)0);
     BLRemove->SetBaselineSamples((size_t)512);
     TFile *histFile;
@@ -99,10 +99,10 @@ int FTPower(int start, int end)
     FTTree->Branch("highFreqPower", &highFreqPower);
     
     //set ranges for low and high frequency power calculations
-    double lowStartFreq = 2.5*CLHEP::MHz;
-    double lowStopFreq = 3.0*CLHEP::MHz;
-    double highStartFreq = 12.0*CLHEP::MHz;
-    double highStopFreq = 14.0*CLHEP::MHz;
+    double lowStartFreq = firstStart*CLHEP::MHz;
+    double lowStopFreq = firstEnd*CLHEP::MHz;
+    double highStartFreq = secondStart*CLHEP::MHz;
+    double highStopFreq = secondEnd*CLHEP::MHz;
     double binWidth;
     size_t lowStartBin = 0, lowStopBin= 0, highStartBin = 0, highStopBin= 0;
     double lowPowerSum = 0;
@@ -118,8 +118,6 @@ int FTPower(int start, int end)
         sprintf(histname,"SummedFTForCh%d", j);
         hFTsumArray[j]->SetNameTitle(histname,histname);
         totalEntries[j] = 0;
-	maxAverage[j] = 0;
-	wfCount[j] = 0;
     }
     //WARNING: const_cast of const TChain to non-const is required to access branches. This is a potentially unsafe operation. Do not make changes to saved data trees.  
     TChain* gatChain = const_cast<TChain*>(DataSet->GetGatifiedChain());
@@ -129,7 +127,7 @@ int FTPower(int start, int end)
 	cout << "Data not found! Exiting script." << endl;
 	return 0;
     }
-     gatChain->SetBranchAddress("energyCal",&energy);
+     gatChain->SetBranchAddress("run",&run);
      gatChain->SetBranchAddress("channel",&channel);
      builtChain->SetBranchAddress("event",&event);
      for(int j=0;j<nChannels;j++)
@@ -156,7 +154,6 @@ int FTPower(int start, int end)
          highFreqPower.resize(n);
           for(int j=0; j<n; j++)
           {
-             double e_keV = energy->at(j);
              int ch = channel->at(j);
 	     switch(runType)
 	     {
@@ -215,14 +212,8 @@ int FTPower(int start, int end)
 		    totalEntries[cheasy]++;
                     Wave=event->GetWaveform(j);
                     
+	     	    adcScale = calMap->GetScale(ch, "energy",(size_t)run);
                     BLRemove->Transform(Wave);
-		    if(e_keV < 1462 && e_keV > 1458)
-		    {
-			maxFinder->Transform(Wave);
-			maxValue = maxFinder->GetTheExtremumValue();
-			wfCount[cheasy]++;
-			maxAverage[cheasy] += maxValue;
-                    }
 
 		    Wave->SetLength(700);
                     FTWave = new((*FTWaveArr)[j]) MGTWaveformFT();
@@ -230,29 +221,36 @@ int FTPower(int start, int end)
 	            if(k == 0 && j == 0)//first entry
 	            {
 			binWidth = ((FTWave->GetSamplingFrequency()/CLHEP::MHz)/2.0)*(1.0/FTWave->GetDataLength())*(CLHEP::MHz);
-			lowStartBin = (size_t) floor(lowStartFreq/binWidth);
-			lowStopBin = (size_t) ceil(lowStopFreq/binWidth);
-			highStartBin = (size_t) floor(highStartFreq/binWidth);
-			highStopBin = (size_t) ceil(highStopFreq/binWidth);
+			lowStartBin = (size_t) floor((lowStartFreq+(0.5*binWidth))/binWidth);
+			lowStopBin = (size_t) ceil((lowStopFreq-(0.5*binWidth))/binWidth);
+			highStartBin = (size_t) floor((highStartFreq+(0.5*binWidth))/binWidth);
+			highStopBin = (size_t) ceil((highStopFreq-(.5*binWidth))/binWidth);
 		    }
 		    //loop over sampling ranges for low and high freq power
-		    for(size_t x = lowStartBin; x < lowStopBin+1 ; x++) 
-		    {  
-			if( x == 0 || x == FTWave->GetDataLength())
-			    lowPowerSum += std::norm(FTWave->At(x));
-			else
-			    lowPowerSum += 2*std::norm(FTWave->At(x));
+		    if(!(lowStartFreq==0 && lowStopFreq==0))
+		    {
+		    	for(size_t x = lowStartBin; x < lowStopBin ; x++) 
+		    	{  
+			    if( x == 0 || x == FTWave->GetDataLength())
+			    	lowPowerSum += std::norm(FTWave->At(x));
+			    else
+			    	lowPowerSum += 2*std::norm(FTWave->At(x));
+		        }
 		    }
-
-		    for(size_t x = highStartBin; x < highStopBin+1 ; x++) 
-		    {  
-			if( x == 0 || x == FTWave->GetDataLength())
-			    highPowerSum += std::norm(FTWave->At(x));
-			else
-			    highPowerSum += 2*std::norm(FTWave->At(x));
-		    }
-		    lowFreqPower[j] = lowPowerSum;
-		    highFreqPower[j] = highPowerSum;
+		    else { lowPowerSum = 0; }
+		    if(!(highStartFreq ==0 && highStopFreq ==0))
+		    {
+		    	for(size_t x = highStartBin; x < highStopBin+1 ; x++) 
+		    	{  
+			    if( x == 0 || x == FTWave->GetDataLength())
+			    	highPowerSum += std::norm(FTWave->At(x));
+			    else
+			    	highPowerSum += 2*std::norm(FTWave->At(x));
+		    	}
+		   }
+		    else { highPowerSum = 0; }
+		    lowFreqPower[j] = lowPowerSum/adcScale;
+		    highFreqPower[j] = highPowerSum/adcScale;
 		    lowPowerSum = 0;
 		    highPowerSum = 0;
 
@@ -270,7 +268,7 @@ int FTPower(int start, int end)
            }
 
          FTTree->Fill();
-	FTWaveArr->Clear();
+	FTWaveArr->Delete();
       }
      cout << "done" << endl;
         
@@ -287,18 +285,8 @@ int FTPower(int start, int end)
             {
                cout << "No entries in this channel!" << endl;
             }
-            if(wfCount[k] > 0)
-            {
-	      maxAverage[k] = maxAverage[k]/((double)wfCount[k]);
-              adcScale = maxAverage[k]/1460.0;	
               cout << "Scaling by " << adcScale  << " to account for gain in channel " << k << endl; 
               hFTsumArray[k]->Scale(adcScale);  //Scale power by gain of channel
-            }
-	    else
-            {
-               cout << "No 1460 keV entries in this channel!" << endl;
-            }
-       
         
          //Write histogram to .root file for later use
          sprintf(outfilename, "$MJDDATADIR/../../users/jgruszko/FT/FT_Average/Ch%d_%d_to_%d.root",k, startrun, endrun);
@@ -316,12 +304,31 @@ int FTPower(int start, int end)
 
 int main(int argc, char* argv[])
 {
-    if(argc != 3){
-	cout << "Usage: " << argv[0] << " 'starting run number' 'ending run number'" << endl;
+    if(argc != 2 && argc != 3 && argc !=5 && argc!= 7){
+	cout << "Usage: " << argv[0] << " 'starting run number' 'ending run number (optional)' 'first frequency range start (optional)' 'first frequency range end (optional)' 'second frequency range start (optional)' 'second frequency range end (optional)'. End of frequency range is required if start is given. Give frequencies in MHz." << endl;
 	return 1;
     }
-    cout << argv[1] << " is start and " << argv[2] << " is end." << endl;
     int startRun = atoi(argv[1]);
-    int endRun = atoi(argv[2]);
-    return FTPower(startRun, endRun);
+    int endRun;
+    double firstFreqStart, firstFreqEnd, secondFreqStart, secondFreqEnd;
+    if(argc > 2){ endRun = atoi(argv[2]);}
+    else{ endRun = startRun;}
+    if(argc > 3)
+    { 
+	firstFreqStart = atoi(argv[3]);
+	firstFreqEnd = atoi(argv[4]);
+    }
+    else
+    {
+	firstFreqStart = 0;
+	firstFreqEnd = 0;
+	secondFreqStart = 0;
+	secondFreqEnd = 0;
+    }
+    if(argc > 5)
+    { 
+	secondFreqStart = atoi(argv[5]);
+	secondFreqEnd = atoi(argv[6]);
+    }
+    return FTPower(startRun, endRun, firstFreqStart, firstFreqEnd, secondFreqStart, secondFreqEnd);
 }
