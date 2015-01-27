@@ -22,7 +22,6 @@ cout<<"Opened FT file"<<endl;
    
    sprintf(histFileName, "/global/project/projectdirs/majorana/users/jgruszko/FT/FT_Power/%d_to_%d.root", startRun, endRun); 
    TFile *outFile; 
-cout<<"Opened output file"<<endl;
 
    int nChannels= 18;
    char wavename[200], gifFile[300], histName[200], canName[200], averageName[200], averageTitle[300], integratedTitle[300], title[300], selection[300], axisTitle[200];
@@ -37,15 +36,13 @@ cout<<"Opened output file"<<endl;
    gatChain->SetBranchAddress("timestamp", &timestamp);
    gatChain->SetBranchAddress("channel", &ch);
    gatChain->SetBranchAddress("energyCal", &energy);   
-cout<<"Set branch addresses"<<endl;
    double energy_keV; 
    int time;
    int nentriesFT = FTTree->GetEntries();
    int nentriesGAT = gatChain->GetEntries();
    if(nentriesFT < nentriesGAT){ int nentries = nentriesFT ;}
    else{ int nentries = nentriesGAT; }
-cout<<"Set nentries"<<endl;
-   nentries = 100;
+   //nentries = 100;
    int cheasyArr[nChannels] = {112, 113, 114, 115, 118, 119, 120, 121, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153};
    int cheasy = 0;
    size_t chan = 0;
@@ -59,7 +56,6 @@ cout<<"Set nentries"<<endl;
    //intitialize everything for the FT waveform samples
    FTTree->GetEntry(0);
    gatChain->GetEntry(0);
-cout<<"Got entry 0 for intialization."<<endl;
    if( ftArr->At(0)!= 0){ ftWave = (MGTWaveformFT*) ftArr->At(0); cout<<"Got ftwf 0, 0"<<endl; } 
    size_t dataLength = ftWave->GetDataLength();
    double nyquistFreq = ((ftWave->GetSamplingFrequency()/CLHEP::MHz)*0.5);
@@ -67,7 +63,6 @@ cout<<"Got entry 0 for intialization."<<endl;
    double startFreq = 0-binWidth/2.0;
    double endFreq = nyquistFreq - binWidth/2.0;
    int entriesPass[nChannels];
-cout<<"Set frequency scale"<<endl;
    //intialize channel plots
    for(int a = 0; a < nChannels; a++)
    {
@@ -79,15 +74,10 @@ cout<<"Set frequency scale"<<endl;
 	sprintf(averageTitle, "FT Power Average in Channel %d", cheasyArr[a]);
 	sprintf(integratedTitle, "Integrated FT Power in Channel %d", cheasyArr[a]);
 	sprintf(selection, "timestamp > 4E10 && channel == %d", cheasyArr[a]);
-	cout<<title<<endl;
-	cout<<averageTitle<<endl;
-	cout<<integratedTitle<<endl;
-	cout<<selection<<endl;
 
 	//use the number of entries that pass the cut
 	entriesPass[a] = (int) gatChain->Draw("channel", selection, "goff");
-	cout<<"Got the number of entries passing the cut."<<endl; 
-	powerHist[a] = new TH2D(histName, title, entriesPass[a], -0.5, entriesPass[a]-0.5, dataLength,startFreq, endFreq);
+	powerHist[a] = new TH2D(histName, title, (int) (entriesPass[a]/10), -0.5, entriesPass[a]-0.5, dataLength,startFreq, endFreq);
 	averagePower[a] = new TH1D();
 	averagePower[a]->SetTitle(averageTitle);
 	integratedPower[a] = new TH1D();
@@ -95,13 +85,11 @@ cout<<"Set frequency scale"<<endl;
 	canArr[a] = new TCanvas(canName, title, 1000, 1000);
 	canArr[a]->Divide(2,2);
     }
-cout<<"Initialized everything ok."<<endl;
 
    for(int i = 0; i < nentries; i++)
    {
 	if(i%10==0){ cout <<" Checking entry "<< i <<" of "<< nentries<<" i.e. "<<100*(i/nentries)<< " % finished"<<endl; }
 	FTTree->GetEntry(i);
-	//gatChain->GetEntry(i);
 	gatChain->GetEntry(i);
 	n = ch->size();
 	for(int j = 0; j < n; j++)
@@ -137,7 +125,6 @@ cout<<"Initialized everything ok."<<endl;
 	    if(chan == 151) cheasy = 15;
 	    if(chan == 152) cheasy = 16;
 	    if(chan == 153) cheasy = 17;
-cout<<"Got an event ok."<<endl;
 	    if(cheasy > -1 && cheasy < nChannels && time > 4E0 && ftWave != 0)
 	    {
 		for(int k = 0; k < dataLength; k++)
@@ -153,15 +140,12 @@ cout<<"Got an event ok."<<endl;
 		   	powerHist[cheasy]->SetBinContent(nWF[cheasy], k, power);
 	        }
 		nWF[cheasy]++;
-cout<<"Looped through FT ok"<<endl;
 	     }
 	  }
 	  ftArr->Clear("C");
-cout<<"Cleared ftArr."<<endl;
 	}
 	for(int b=0; b<nChannels; b++)
 	{
-	    //powerHist[b]->GetXaxis()->SetRange(0,nWF[b]);
 	    sprintf(axisTitle, "Event Number in Channel %d (timestamp > 4E10)", cheasyArr[b]);
 	    powerHist[b]->GetXaxis()->SetTitle(axisTitle);
 	    powerHist[b]->GetYaxis()->SetTitle("Frequency (MHz)");
