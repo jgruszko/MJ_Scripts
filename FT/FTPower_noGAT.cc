@@ -22,15 +22,15 @@
 using namespace std;
 using namespace CLHEP;
 
-int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<double> rangeEnd)
+int FTPower_noGAT(int start, int end, int samples, vector<double> rangeStart, vector<double> rangeEnd)
 {
     //gROOT->Reset();
     //gROOT->ProcessLine(".x $MGDODIR/Root/LoadMGDOClasses.C"); 
     //gROOT->ProcessLine(".L $MGDODIR/lib/libMGDOClasses.C"); 
     //gROOT->ProcessLine(".include \"$MGDODIR/Majorana\""); 
-    char title[200],titleSum[200], parName[200], histname[200], FTWFname[200], outfilename[200];
+    char title[200],titleSum[200], parName[200], histname[200], fileName[300], FTWFname[200], outfilename[200];
     
-    string calibrationFile = "/global/project/projectdirs/majorana/data/production/bk_calibration_summedrun.dat";
+    //string calibrationFile = "/global/project/projectdirs/majorana/data/production/bk_calibration_summedrun.dat";
     int startrun=start;
     int endrun=end;
     int nSamples = samples;
@@ -40,7 +40,6 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
     vector<double> freqEnd=rangeEnd;
     int nFreqs = freqStart.size();
 
-    Double_t run = 0;
     if(endrun < startrun)
     {
 	cout <<"Run range not recognized as valid. Exiting script."<< endl;
@@ -66,10 +65,9 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
 	cout <<"Run out of range. Start run is " << startrun <<". Exiting script."<< endl;
 	return 0;
     }
-    double adcScale= 1;
+    //double adcScale= 1;
     double eventScale;
 
-    vector<double>* channel = 0;
 
     MGTEvent* event = new MGTEvent();
     MGWFFastFourierTransformDefault* FFT = new MGWFFastFourierTransformDefault;
@@ -80,8 +78,8 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
     //TH1D* hFTsum = new TH1D();
  
     
-    GATCalibrationMap* calMap = new GATCalibrationMap();
-    calMap->ReadCalibrationMapFromTextFile(calibrationFile);
+    //GATCalibrationMap* calMap = new GATCalibrationMap();
+    //calMap->ReadCalibrationMapFromTextFile(calibrationFile);
 
     TH1D* hFTsumArray[nChannels];
     MGTWaveformFT* FTsumArray[nChannels];
@@ -92,7 +90,8 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
     TFile *histFile;
     MGTWaveformFT* FTWave;
     
-    sprintf(FTWFname, "/global/project/projectdirs/majorana/users/jgruszko/FT/FTWF/%d_to_%d_test.root", startrun, endrun);
+    if(startrun != endrun){ sprintf(FTWFname, "/global/project/projectdirs/majorana/users/jgruszko/FT/FTWF/%d_to_%d.root", startrun, endrun); }
+    else { sprintf(FTWFname, "/global/project/projectdirs/majorana/users/jgruszko/FT/FTWF/%d.root", startrun); }
     TFile *treeFile = new TFile(FTWFname, "RECREATE"); 
     TTree *FTTree = new TTree("FTTree", "FTTree");
 
@@ -109,6 +108,8 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
     vector<double> integratedPower;
     FTTree->Branch("integratedPower", &integratedPower);
     
+    vector<int> channel;
+    FTTree->Branch("channel", &channel);
     //set ranges for low and high frequency power calculations
     double binWidth;
     vector<int> startBin;
@@ -120,26 +121,24 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
     size_t nBins = 0;
 
 
-    GATDataSet* DataSet = new GATDataSet(startrun, endrun);
+    //GATDataSet* DataSet = new GATDataSet(startrun, endrun);
 
     for(int j=0;j<nChannels;j++)
     {
         FTsumArray[j]= new MGTWaveformFT();
         hFTsumArray[j]= new TH1D();
-        sprintf(histname,"SummedFTForCh%d", j);
+        sprintf(histname,"Ch%d_AvgFT", j);
         hFTsumArray[j]->SetNameTitle(histname,histname);
         totalEntries[j] = 0;
     }
-    //WARNING: const_cast of const TChain to non-const is required to access branches. This is a potentially unsafe operation. Do not make changes to saved data trees.  
-    TChain* gatChain = const_cast<TChain*>(DataSet->GetGatifiedChain());
-    TChain* builtChain = const_cast<TChain*>(DataSet->GetBuiltChain());
-    if(!(gatChain && builtChain))
+    TChain* builtChain = new TChain("MGTree");
+    for(int r = startrun; r<endrun+1; r++)
     {
-	cout << "Data not found! Exiting script." << endl;
-	return 0;
+        sprintf(fileName, "/global/project/projectdirs/majorana/users/iguinn/Built/OR_run%d.root", r);
+	builtChain->Add(fileName);
     }
-     gatChain->SetBranchAddress("run",&run);
-     gatChain->SetBranchAddress("channel",&channel);
+     //gatChain->SetBranchAddress("run",&run);
+     //gatChain->SetBranchAddress("channel",&channel);
      builtChain->SetBranchAddress("event",&event);
      for(int j=0;j<nChannels;j++)
      {
@@ -147,9 +146,9 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
      }
 
      int cheasy = 0;
-     int nentries= gatChain->GetEntries();
+     int nentries= builtChain->GetEntries();
      cout << "number of entries " << nentries << endl;
-      nentries = 10; 
+      //nentries = 10; 
 
      for(int k=0;k<nentries;k++)
      {
@@ -158,14 +157,15 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
             cout << "event number " << k << " of " << nentries << " i.e. " << k/double(nentries)*100 << " % done" << endl;
          }
          //FTWaveArr->Delete();
-         gatChain->GetEntry(k);
+        // gatChain->GetEntry(k);
          builtChain->GetEntry(k);
-         int n = channel->size();
+         int n = event->GetNWaveforms();
         for(int j= 0; j<nFreqs; j++) {freqPower.at(j).resize(n);}
 	integratedPower.resize(n);
+	channel.resize(n);
           for(int j=0; j<n; j++)
           {
-             int ch = channel->at(j);
+             int ch = event->GetWaveform(j)->GetID();
 	     switch(runType)
 	     {
 		case 1:
@@ -218,24 +218,23 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
                 sprintf(title,"Event %d in channel %d", k, ch);
                 sprintf(titleSum,"Summed FT of channel %d", ch);
                 
-		//if((ch>145 && ch<154 && runType == 1) || (((ch>111 && ch<116)||( ch>117 && ch<120) || (ch>145 && ch<152)) && runType == 2) || (((ch>111 && ch<116)||( ch>117 && ch<122) || (ch>143 && ch<154)) && runType == 3))
-               // {
 		    totalEntries[cheasy]++;
                     Wave=event->GetWaveform(j);
-                    
-	     	    adcScale = calMap->GetScale(ch, "energy",(size_t)run);
+                   if(Wave == 0){ cout<<"0 waveform found at event "<<k <<", waveform "<<j<<endl; }
+	     	    //adcScale = calMap->GetScale(ch, "energy",(size_t)run);
                     BLRemove->Transform(Wave);
 
 		    Wave->SetLength(nSamples);
                     FTWave = new((*FTWaveArr)[j]) MGTWaveformFT();
                     FFT->PerformFFT(Wave,FTWave);
+                   if(FTWave == 0){ cout<<"0 ft waveform made at event "<<k <<", waveform "<<j<<endl; }
 	            if(k == 0 && j == 0)//first entry
 	            {
 			binWidth = ((FTWave->GetSamplingFrequency()/CLHEP::MHz)/2.0)*(1.0/FTWave->GetDataLength())*(CLHEP::MHz);
 			for(int x = 0; x<nFreqs; x++)
 			{
-			    startBin[x] = (size_t) floor(((freqStart.at(x)*CLHEP::MHz)+(0.5*binWidth))/binWidth);
-			    stopBin[x] = (size_t) ceil(((freqEnd.at(x)*CLHEP::MHz)-(0.5*binWidth))/binWidth);
+			    startBin[x] = (size_t) floor(((freqStart.at(x)*CLHEP::MHz)+(0.5*binWidth))/((double)binWidth));
+			    stopBin[x] = (size_t) ceil(((freqEnd.at(x)*CLHEP::MHz)-(0.5*binWidth))/((double)binWidth));
 			    cout<<"Integrating from bin "<<startBin[x]<<" to "<<stopBin[x]<<" for range "<<freqStart.at(x)<<" to "<< freqEnd.at(x)<<endl;
 			}
 			nBins = FTWave->GetDataLength();
@@ -250,7 +249,7 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
 			    else
 			    	sum += 2*std::norm(FTWave->At(x));
 		        }
-			freqPower.at(y).at(j) = sum*(adcScale*adcScale);
+			freqPower.at(y).at(j) = sum;
 		    }
 		    for(size_t x = 0; x < nBins; x++)
 		    {
@@ -260,7 +259,9 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
 			    totalSum += 2*std::norm(FTWave->At(x));
 		    }
 		    	
-		    integratedPower[j] = totalSum*(adcScale*adcScale);
+		    integratedPower[j] = totalSum;
+		    channel[j] = Wave->GetID();
+		    if(channel[j] ==0){ cout<<"Found channel = 0 at event "<<k<<", waveform "<<j<<endl; }
 		    sum = 0;
 		    totalSum = 0;
 
@@ -274,8 +275,7 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
                    
 		    FTsumArray[cheasy]->LoadIntoHist(hFTsumArray[cheasy], MGTWaveformFT::kPower);
                    
-             // }
-           }
+              }
 
          FTTree->Fill();
 	FTWaveArr->Delete();
@@ -295,12 +295,13 @@ int FTPower(int start, int end, int samples, vector<double> rangeStart, vector<d
             {
                cout << "No entries in this channel!" << endl;
             }
- 	      cout << "Scaling by " << adcScale  << " squared to account for gain in channel " << k << endl; 
-              hFTsumArray[k]->Scale(adcScale*adcScale);  //Scale power by gain of channel
+ 	      //cout << "Scaling by " << adcScale  << " squared to account for gain in channel " << k << endl; 
+              //hFTsumArray[k]->Scale(adcScale*adcScale);  //Scale power by gain of channel
          
 	//Write histogram to .root file for later use
-         sprintf(outfilename, "/global/project/projectdirs/majorana/users/jgruszko/FT/FT_Average/Ch%d_%d_to_%d.root",k, startrun, endrun);
-         histFile = new TFile(outfilename, "RECREATE");
+         if(startrun != endrun){ sprintf(outfilename, "/global/project/projectdirs/majorana/users/jgruszko/FT/FT_Average/%d_to_%d.root", startrun, endrun); }
+        else { sprintf(outfilename, "/global/project/projectdirs/majorana/users/jgruszko/FT/FT_Average/%d.root", startrun); }
+	histFile = new TFile(outfilename, "UPDATE");
          hFTsumArray[k]->Write();
          histFile->Close();
       }
@@ -334,5 +335,5 @@ int main(int argc, char* argv[])
 	freqEnds.push_back(atof(argv[i+1]));
 	i=i+2; 
     }
-    return FTPower(startRun, endRun, nSamples, freqStarts, freqEnds);
+    return FTPower_noGAT(startRun, endRun, nSamples, freqStarts, freqEnds);
 }
